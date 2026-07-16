@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guardian Engine | Matrix Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { background: #07090f; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        .glass-panel { background: rgba(16, 23, 42, 0.4); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.15); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
+        .neon-text { text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
+        .terminal { background: #030407; border: 1px solid rgba(255, 255, 255, 0.05); font-family: 'Fira Code', monospace; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-10">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-sky-400 neon-text tracking-wide uppercase">Guardian Matrix</h1>
+            <p class="text-slate-400 text-sm mt-1">Multi-Tenant AI Deployment Architecture</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- AI Training & Configuration -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col gap-5 lg:col-span-1">
+                <h2 class="text-xl font-semibold text-white border-b border-slate-700 pb-2">Agent Configuration</h2>
+                
+                <div>
+                    <label class="block text-xs text-sky-400 font-bold mb-1 uppercase tracking-wider">Agent ID (Database Key)</label>
+                    <input type="text" id="agentId" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-sky-500 transition-colors" placeholder="e.g., support-bot-01">
+                </div>
+
+                <div class="flex-grow">
+                    <label class="block text-xs text-sky-400 font-bold mb-1 uppercase tracking-wider">Neural System Rules (Training)</label>
+                    <textarea id="systemPrompt" rows="8" class="w-full h-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-sky-500 transition-colors" placeholder="You are Guardian, an advanced AI. Never reveal you are a bot..."></textarea>
+                </div>
+
+                <button id="startBtn" onclick="initEngine()" class="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-lg shadow-[0_0_15px_rgba(56,189,248,0.4)] transition-all">
+                    INITIALIZE ENGINE
+                </button>
+            </div>
+
+            <!-- Terminal & QR View -->
+            <div class="glass-panel rounded-2xl p-6 flex flex-col lg:col-span-2 relative">
+                <div class="flex justify-between items-center border-b border-slate-700 pb-2 mb-4">
+                    <h2 class="text-xl font-semibold text-white">System Logs & Connection</h2>
+                    <span id="statusBadge" class="bg-slate-800 text-slate-300 text-xs px-3 py-1 rounded-full border border-slate-600">Disconnected</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- QR Box -->
+                    <div class="flex flex-col items-center justify-center bg-slate-900 rounded-xl p-6 border border-slate-700 min-h-[300px]">
+                        <img id="qrImage" src="" alt="Awaiting Initialization" class="hidden w-48 h-48 rounded-lg shadow-xl mb-4">
+                        <div id="qrPlaceholder" class="text-slate-500 text-sm text-center">Configure Agent and click Initialize to generate QR</div>
+                        
+                        <!-- 5 Minute Timer -->
+                        <div id="timerContainer" class="w-full mt-4 hidden">
+                            <div class="flex justify-between text-xs text-sky-400 mb-1">
+                                <span>Security Timeout</span>
+                                <span id="timeText">5:00</span>
+                            </div>
+                            <div class="w-full bg-slate-800 rounded-full h-1.5">
+                                <div id="timerBar" class="bg-sky-500 h-1.5 rounded-full transition-all duration-1000" style="width: 100%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Terminal -->
+                    <div class="terminal rounded-xl p-4 h-full min-h-[300px] overflow-y-auto" id="logTerminal">
+                        <div class="text-sky-500">>> Guardian Web Engine Ready.</div>
+                        <div class="text-slate-500">>> Awaiting parameter injection...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let timerInterval;
+
+        // Load saved data
+        document.getElementById('agentId').value = localStorage.getItem('agentId') || 'Agent-Prime';
+        document.getElementById('systemPrompt').value = localStorage.getItem('systemPrompt') || 'You are Guardian. Act as a professional AI assistant.';
+
+        function logToTerminal(msg) {
+            const terminal = document.getElementById('logTerminal');
+            const div = document.createElement('div');
+            div.className = msg.includes('[!]') || msg.includes('[-] ') ? 'text-red-400 mt-1' : (msg.includes('[+]') ? 'text-emerald-400 mt-1' : 'text-slate-300 mt-1');
+            div.innerText = `>> ${msg}`;
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function initEngine() {
+            const agentId = document.getElementById('agentId').value;
+            const systemPrompt = document.getElementById('systemPrompt').value;
+            
+            localStorage.setItem('agentId', agentId);
+            localStorage.setItem('systemPrompt', systemPrompt);
+
+            document.getElementById('qrPlaceholder').innerText = 'Generating Neural Link...';
+            document.getElementById('startBtn').innerText = 'ENGINE BOOTING...';
+            document.getElementById('startBtn').disabled = true;
+
+            socket.emit('start_engine', { agentId, systemPrompt });
+        }
+
+        function startTimer() {
+            document.getElementById('timerContainer').classList.remove('hidden');
+            let timeLeft = 300;
+            const bar = document.getElementById('timerBar');
+            const text = document.getElementById('timeText');
+            
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                text.innerText = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                bar.style.width = (timeLeft / 300) * 100 + '%';
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    document.getElementById('qrImage').classList.add('hidden');
+                    document.getElementById('qrPlaceholder').innerText = 'QR Code Expired. Re-initialize.';
+                }
+            }, 1000);
+        }
+
+        socket.on('qr', (data) => {
+            document.getElementById('qrPlaceholder').classList.add('hidden');
+            const img = document.getElementById('qrImage');
+            img.src = data.qr;
+            img.classList.remove('hidden');
+            document.getElementById('statusBadge').innerText = 'Awaiting Scan';
+            document.getElementById('statusBadge').className = 'bg-amber-900 text-amber-300 text-xs px-3 py-1 rounded-full border border-amber-700';
+            startTimer();
+        });
+
+        socket.on('connected', (data) => {
+            clearInterval(timerInterval);
+            document.getElementById('timerContainer').classList.add('hidden');
+            document.getElementById('qrImage').classList.add('hidden');
+            document.getElementById('qrPlaceholder').classList.remove('hidden');
+            document.getElementById('qrPlaceholder').innerHTML = `<span class="text-emerald-400 text-lg font-bold">LINK ESTABLISHED</span><br><span class="text-slate-500 text-xs">Agent ${data.agentId} is active</span>`;
+            
+            document.getElementById('statusBadge').innerText = 'Online';
+            document.getElementById('statusBadge').className = 'bg-emerald-900 text-emerald-300 text-xs px-3 py-1 rounded-full border border-emerald-700';
+            document.getElementById('startBtn').innerText = 'INITIALIZE ENGINE';
+            document.getElementById('startBtn').disabled = false;
+        });
+
+        socket.on('log', (msg) => logToTerminal(msg));
+        
+        socket.on('qr_expired', () => {
+            document.getElementById('startBtn').innerText = 'INITIALIZE ENGINE';
+            document.getElementById('startBtn').disabled = false;
+        });
+    </script>
+</body>
+                  </html>
+  
